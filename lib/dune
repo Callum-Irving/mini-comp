@@ -1,2 +1,3 @@
 (library
- (name mini_comp))
+ (name mini_comp)
+ (preprocess (pps ppx_deriving.show)))

@@ -1,4 +1,5 @@
 (executable
  (public_name mini_comp)
  (name main)
- (libraries mini_comp))
+ (libraries mini_comp)
+ (preprocess (pps ppx_deriving.show)))

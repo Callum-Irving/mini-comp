@@ -23,3 +23,11 @@ The result of each line is printed to stdout if not assigned to a variable.
 - `RPAREN`: ')'
 - `NEWLINE`: '\n'
 - `EQUALS`: '='
+
+## To-do
+
+- Optimize parser code (there are repeated patterns that could probably be
+  extracted to functions).
+- Fill in documentation.
+- In the future, the lexer doesn't need to generate the entire list of tokens
+  before parsing. Instead, the parser can parse as the lexer generates tokens.
