@@ -23,30 +23,37 @@ let advance parser =
   | [] -> raise (NotImplemented "couldn't advance parser")
 ;;
 
+let expect token parser =
+  match parser.lookahead |> Option.map Token.kind with
+  | Some tok when tok = token -> Some (advance parser)
+  | _ -> None
+;;
+
 let rec skip_while parser pred =
   if pred parser.lookahead then skip_while (advance parser) pred else parser
 ;;
 
 (** Consume an identifier of integer expression from parser. *)
 let rec parse_factor parser =
-  match parser.lookahead with
+  match parser.lookahead |> Option.map Token.kind with
   | Some Token.LeftParen ->
     let parser = advance parser in
     let parser, inner_expr = parse_expr parser in
-    (match parser.lookahead with
-     | Some Token.RightParen -> advance parser, inner_expr
-     | _ -> raise (UnexpectedToken "unexpected token when parsing factor, expected ')'"))
+    parser
+    |> expect Token.RightParen
+    |> Option.map (fun parser -> parser, inner_expr)
+    |> Option.get
   | Some (Token.Ident name) -> advance parser, Ast.Ident name
   | Some (Token.Literal value) -> advance parser, Ast.Int value
   | Some tok ->
-    raise (NotImplemented ("expected literal or ident, got " ^ Token.show tok))
+    raise (NotImplemented ("expected literal or ident, got " ^ Token.show_token_type tok))
   | None -> raise UnexpectedEOF
 
 (** Consume a multiplication or division binary expression from parser. *)
 and parse_term parser =
   let parser, first_factor = parse_factor parser in
   let try_factor parser =
-    match parser.lookahead with
+    match parser.lookahead |> Option.map Token.kind with
     | Some Token.Times ->
       let parser, factor = advance parser |> parse_factor in
       parser, Some (Ast.Times, factor)
@@ -66,7 +73,7 @@ and parse_term parser =
 and parse_expr parser =
   let parser, first_term = parse_term parser in
   let try_term parser =
-    match parser.lookahead with
+    match parser.lookahead |> Option.map Token.kind with
     | Some Token.Plus ->
       let parser, term = advance parser |> parse_term in
       parser, Some (Ast.Plus, term)
@@ -86,16 +93,20 @@ and parse_expr parser =
 and parse_expr_list parser =
   let parser, first_expr = parse_expr parser in
   let try_expr parser =
-    match parser.lookahead with
+    match parser.lookahead |> Option.map Token.kind with
     | Some Token.Newline ->
-      let parser = skip_while parser (( = ) (Some Token.Newline)) in
-      if parser.lookahead = Some Token.EOF
+      let parser =
+        skip_while parser (fun tok -> Option.map Token.kind tok = Some Token.Newline)
+      in
+      if parser.lookahead |> Option.map Token.kind = Some Token.EOF
       then parser, None
       else (
         let parser, expr = parse_expr parser in
         parser, Some expr)
     | Some Token.EOF -> parser, None
-    | Some other -> raise (UnexpectedToken "expected EOF or newline, found other")
+    | Some other ->
+      raise
+        (UnexpectedToken ("expected EOF or newline, found " ^ Token.show_token_type other))
     | None -> raise UnexpectedEOF
   in
   let rec loop_exprs parser acc =
