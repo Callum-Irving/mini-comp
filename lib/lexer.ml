@@ -11,6 +11,9 @@ exception UnexpectedChar of string * int
 
 exception LexerError of string
 
+(** Convert a char to a string. *)
+let string_of_char ch = String.make 1 ch
+
 (** Utility function for determining if str is empty. *)
 let is_empty_string str = String.length str = 0
 
@@ -34,9 +37,19 @@ let advance lexer =
     | None -> raise (LexerError "lexer expected more input"))
 ;;
 
+(** Skip next character if lexer.ch = ch. *)
+let expect ch lexer = if lexer.ch = Some ch then advance lexer, Some ch else lexer, None
+
 (** Advance lexer posn and ch until pred is met. *)
-let skip_while lexer pred =
-  let rec loop lexer = if pred lexer.ch then loop (advance lexer) else lexer in
+let skip_while pred lexer =
+  let current_ch_matches pred lexer =
+    match lexer.ch with
+    | Some ch -> pred ch
+    | None -> false
+  in
+  let rec loop lexer =
+    if current_ch_matches pred lexer then loop (advance lexer) else lexer
+  in
   loop lexer
 ;;
 
@@ -44,15 +57,14 @@ let skip_while lexer pred =
 let skip_whitespace lexer =
   let is_whitespace ch =
     match ch with
-    | Some (' ' | '\r' | '\t') -> true
+    | ' ' | '\r' | '\t' -> true
     | _ -> false
   in
-  skip_while lexer is_whitespace
+  skip_while is_whitespace lexer
 ;;
 
-let string_of_char ch = String.make 1 ch
-
-let take_literal (lexer : t) : t * Token.t =
+(** Consume a literal from lexer. *)
+let take_literal lexer : t * Token.t =
   let posn = lexer.posn in
   let line = lexer.line in
   let rec take_chars lexer acc =
@@ -68,6 +80,7 @@ let take_literal (lexer : t) : t * Token.t =
   lexer, { kind; posn; line }
 ;;
 
+(** Consume an identifier from lexer. *)
 let take_ident lexer : t * Token.t =
   let posn = lexer.posn in
   let line = lexer.line in
@@ -83,25 +96,34 @@ let take_ident lexer : t * Token.t =
   lexer, { kind; posn; line }
 ;;
 
+(** Returns a token ok kind kind at the current lexer position. *)
 let token_at_posn lexer kind : Token.t = { kind; posn = lexer.posn; line = lexer.line }
+
+(** Skip comment if there is one starting at the current char, otherwise leave
+    lexer unchanged. *)
+let skip_comment lexer =
+  let lexer, first_char = expect '#' lexer in
+  if first_char = None then lexer else skip_while (( != ) '\n') lexer
+;;
 
 (** Documented in lexer.mli *)
 let next_token lexer : t * Token.t =
   let lexer = skip_whitespace lexer in
+  let lexer = skip_comment lexer in
   let open Token in
   match lexer.ch with
   | None -> lexer, token_at_posn lexer EOF
   | Some ch ->
+    let tok_and_advance token_type = advance lexer, token_at_posn lexer token_type in
     (match ch with
-     (* TODO: shrink code size. *)
-     | '+' -> advance lexer, token_at_posn lexer Plus
-     | '-' -> advance lexer, token_at_posn lexer Minus
-     | '*' -> advance lexer, token_at_posn lexer Times
-     | '/' -> advance lexer, token_at_posn lexer Divide
-     | '=' -> advance lexer, token_at_posn lexer Equals
-     | '(' -> advance lexer, token_at_posn lexer LeftParen
-     | ')' -> advance lexer, token_at_posn lexer RightParen
-     | '\n' -> advance lexer, token_at_posn lexer Newline
+     | '+' -> tok_and_advance Plus
+     | '-' -> tok_and_advance Minus
+     | '*' -> tok_and_advance Times
+     | '/' -> tok_and_advance Divide
+     | '=' -> tok_and_advance Equals
+     | '(' -> tok_and_advance LeftParen
+     | ')' -> tok_and_advance RightParen
+     | '\n' -> tok_and_advance Newline
      | '0' .. '9' -> take_literal lexer
      | 'a' .. 'z' | 'A' .. 'Z' -> take_ident lexer
      | _ ->
